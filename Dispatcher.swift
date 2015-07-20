@@ -1,24 +1,24 @@
 import Foundation
 
-public class Dispatcher {
-    public typealias Callback = Any? -> Void
+public class Dispatcher<ActionType> {
+    public typealias Callback = ActionType -> Void
 
     private let instanceIdentifier = NSUUID().UUIDString
-    public var tokenGenerator: TokenStream.Generator
+    public var tokenGenerator: DispatchTokenStream.Generator
 
-    private var callbacks: [Token: Callback] = [:]
-    private var isPending: [Token: (Bool)] = [:]
-    private var isHandled: [Token: (Bool)] = [:]
+    private var callbacks: [DispatchToken: Callback] = [:]
+    private var isPending: [DispatchToken: (Bool)] = [:]
+    private var isHandled: [DispatchToken: (Bool)] = [:]
     private var isDispatching: Bool = false
-    private var pendingPayload: Any?
+    private var pendingPayload: ActionType?
     
     public init() {
-        tokenGenerator = TokenStream(prefix: instanceIdentifier).generate()
+        tokenGenerator = DispatchTokenStream(prefix: instanceIdentifier).generate()
     }
     
     ///MARK: Public
 
-    public func register(callback: Callback) -> Token {
+    public func register(callback: Callback) -> DispatchToken {
         if let id = tokenGenerator.next() {
             callbacks[id] = callback
             return id
@@ -27,13 +27,13 @@ public class Dispatcher {
         preconditionFailure("Dispatcher.register(...): Failed to generate token for registration.")
     }
     
-    public func unregister(id: Token) {
+    public func unregister(id: DispatchToken) {
         assertTokenOwnership(id)
         precondition(contains(callbacks.keys, id), "Dispatcher.unregister(...): `\(id)` does not map to a registered callback.")
         callbacks.removeValueForKey(id)
     }
     
-    public func waitFor(ids: [Token]) {
+    public func waitFor(ids: [DispatchToken]) {
         precondition(isDispatching, "Dispatcher.waitFor(...): Must be invoked while dispatching.")
         
         for id in ids {
@@ -46,7 +46,7 @@ public class Dispatcher {
         }
     }
     
-    public func dispatch(payload: Any?) {
+    public func dispatch(payload: ActionType) {
         precondition(!isDispatching, "Dispatch.dispatch(...): Cannot dispatch in the middle of a dispatch.")
 
         startDispatching(payload)
@@ -63,17 +63,17 @@ public class Dispatcher {
     
     ///MARK: Private
 
-    private func assertTokenOwnership(id: Token) {
+    private func assertTokenOwnership(id: DispatchToken) {
         assert(id.prefix == instanceIdentifier, "Token is owned by a different dispatcher")
     }
     
-    private func invokeCallback(id: Token) {
+    private func invokeCallback(id: DispatchToken) {
         isPending[id] = true
-        callbacks[id]!(pendingPayload)
+        callbacks[id]!(pendingPayload!)
         isHandled[id] = true
     }
     
-    private func startDispatching(payload: Any?) {
+    private func startDispatching(payload: ActionType) {
         for id in callbacks.keys {
             isPending[id] = false
             isHandled[id] = false
@@ -90,36 +90,32 @@ public class Dispatcher {
 
 ///MARK: Tokens
 
-extension Dispatcher {
-    public struct Token: Equatable, Hashable {
-        private init(_ prefix: String, _ index: Int) {
-            self.value = "\(prefix)_\(index)"
-            self.prefix = prefix
-        }
-        private let value: String
-        private let prefix: String
-        public var hashValue: Int { return value.hashValue }
+public struct DispatchToken: Equatable, Hashable {
+    private init(_ prefix: String, _ index: Int) {
+        self.value = "\(prefix)_\(index)"
+        self.prefix = prefix
     }
-
-    public struct TokenStream {
-        let prefix: String
-    }
+    private let value: String
+    private let prefix: String
+    public var hashValue: Int { return value.hashValue }
 }
 
-public func ==(lhs: Dispatcher.Token, rhs: Dispatcher.Token) -> Bool {
+public struct DispatchTokenStream: CollectionType {
+    let prefix: String
+    typealias Index = Int
+        public var startIndex: Int { return 0 }
+        public var endIndex: Int { return Int.max }
+
+        public subscript(index: Int) -> DispatchToken {
+            get { return DispatchToken(prefix, index) }
+        }
+
+        public func generate() -> IndexingGenerator<DispatchTokenStream> {
+            return IndexingGenerator(self)
+        }
+    }
+
+public func ==(lhs: DispatchToken, rhs: DispatchToken) -> Bool {
     return lhs.value == rhs.value
 }
 
-extension Dispatcher.TokenStream: CollectionType {
-    typealias Index = Int
-    public var startIndex: Int { return 0 }
-    public var endIndex: Int { return Int.max }
-    
-    public subscript(index: Int) -> Dispatcher.Token {
-        get { return Dispatcher.Token(prefix, index) }
-    }
-    
-    public func generate() -> IndexingGenerator<Dispatcher.TokenStream> {
-        return IndexingGenerator(self)
-    }
-}

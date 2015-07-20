@@ -6,15 +6,15 @@ class MockCallback {
     init(name: String) {
         self.name = name
     }
-    func call(payload: Any?) -> Void {
+    func call(payload: [String: Any]) -> Void {
         print("calling \(name) with \(payload)")
-        self.calls.append(payload as! [String: Any])
+        self.calls.append(payload)
     }
 }
 
 class DispatcherTest: XCTestCase {
     
-    var dispatcher: Dispatcher!
+    var dispatcher: Dispatcher<[String: Any]>!
     var callbackA: MockCallback!
     var callbackB: MockCallback!
     

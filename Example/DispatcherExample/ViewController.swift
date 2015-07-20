@@ -8,7 +8,7 @@
 
 import UIKit
 
-let dispatcher = Dispatcher()
+let dispatcher = Dispatcher<[String:Any]>()
 
 class ViewController: UIViewController {
 
